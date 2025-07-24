@@ -1,0 +1,379 @@
+.text 
+ .global _start 
+
+ _start: 
+ 	 BL begin			   // Start the game setup
+ 	 BL begin_timer		   // Start the timer
+ main: 
+ 	 BL userinput		   // Read the user's input from switches
+ 	 LDR R1, =0xFF200050	   // Load base address for push buttons
+ 	 LDR R0, [R1]			   // Load push button status
+ 	 AND R0, R0, #0x1		   // Check if push button 0 is pressed
+ 	 CMP R0, #0 
+ 	 BEQ main	   // If push button 0 is not pressed, continue the main loop
+ 	 BL timervalue		   // Get timer value to decide opponent's choice
+ 	 BL choices			   // Display the choices of user and opponent
+ 	 BL whoisthewin		   // Decide the winner based on the choices
+ 	 BL show_score		   // Display the updated scores
+ 	 BL winnerofgame		   // Check if there is a winner
+ 	 BL wait		   // Wait for push button 1 to continue or push button 2 to reset
+ 	 B main				   // Continue the main loop
+
+ begin: 
+ 	 LDR R1, =LEDS			   // Load base address for LEDs
+ 	 MOV R0, #0			   // Value to turn off all LEDs
+ 	 STR R0, [R1]			   // Turn off the LEDs
+     
+     // Reset the scores
+ 	 LDR R1, =ScoreUser		   // Load address of user score
+ 	 MOV R0, #0				   // Value 0
+ 	 STR R0, [R1]			   // Reset user score to 0
+ 	 LDR R1, =ScoreOpposite	   // Load address of opponent score
+ 	 STR R0, [R1]			   // Reset opponent score to 0
+     
+ 	 MOV R0, #0				   // Initialize display value
+ 	 LDR R2, =digits		   // Load digits to base address
+ 	 LDR R2, [R2, R0, LSL #2]   // Load digit code for 0
+ 	 LDR R1, =segment1		   // Load base address for segment1
+ 	 ORR R0, R0, R2, LSL #8	   // Combine user and opponent display
+ 	 ORR R0, R0, R2 
+ 	 STR R0, [R1]			   // Write to seven-segment display
+ 	 LDR R1, =segment		   // Load base address for segment
+ 	 LDR R2, =0b00001000		   // Load initial value for display
+ 	 MOV R0, #0 
+ 	 ORR R0, R0, R2, LSL #8	   // Combine initial values for display
+ 	 ORR R0, R0, R2 
+ 	 STR R0, [R1]			   // Write to seven-segment display
+ 	 BX LR					   // Return from subroutine
+
+ begin_timer: 
+ 	 LDR R1, =baseoftimer	   // Load base address for timer
+ 	 LDR R0, =0xFFFFFFFF	   // Load maximum value for timer
+ 	 STR R0, [R1]			   // Set timer value
+ 	 MOV R0, #3				   // Enable and auto-reload timer
+ 	 LDR R1, =controltimer	   // Load timer control register address
+ 	 STR R0, [R1]			   // Write to timer control register
+ 	 BX LR					   // Return from subroutine
+
+ userinput: 
+ 	 PUSH {R4, LR}			   // Save registers R4 and LR
+ 	 LDR R1, =switch		   // Load base address for switches
+ 	 LDR R0, [R1]			   // Load switch status
+ 	 AND R0, R0, #0x7		   // Mask to get first 3 switches for user choice
+ 	 MOV R2, R0				   // Store user choice in R2
+ 	 LDR R1, =userselection	   // Load user choice address
+ 	 STR R2, [R1]			   // Store user choice in memory
+ 	 POP {R4, LR}			   // Restore registers R4 and LR
+ 	 BX LR					   // Return from subroutine
+
+ timervalue: 
+ 	 PUSH {R4, LR}			   // Save registers R4 and LR
+ 	 LDR R1, =valueoftimer	   // Load current timer value address
+ 	 LDR R0, [R1]			   // Read current timer value
+ 	 AND R0, R0, #0xF		   // Mask to get last 4 bits (0-15)
+ 	 CMP R0, #5 
+ 	 BLT select_r			   // If timer value < 5, choose rock
+ 	 CMP R0, #10 
+ 	 BLT select_p			   // If timer value < 10, choose paper
+ 	 B select_s			   // For the remaining cases (10-15), choose scissors.
+
+ select_r: 
+ 	 MOV R0, #0				   // Set selection to rock
+ 	 B store_opposite_choice
+
+ select_p: 
+ 	 MOV R0, #1				   // Set selection to paper
+ 	 B store_opposite_choice
+
+ select_s: 
+ 	 MOV R0, #2				   // Set selection to scissors
+ 
+ store_opposite_choice:
+     LDR R1, =oppositeselection // Load opponent choice address
+ 	 STR R0, [R1]			   // Store opponent choice in memory
+ 	 POP {R4, LR}			   // Restore registers R4 and LR
+ 	 BX LR					   // Return from subroutine
+
+ choices: 
+ 	 PUSH {R4, R5, LR}		   // Save registers R4, R5, and LR
+ 	 LDR R1, =userselection	   // Load user choice address
+ 	 LDR R2, [R1]			   // Load user choice from memory
+ 	 LDR R3, =rckpprscs		   // Load RPS display values base address
+ 	 CMP R2, #1 
+ 	 BEQ rockuser			   // If user choice is rock, display 'r'
+ 	 CMP R2, #2 
+ 	 BEQ paperuser			   // If user choice is paper, display 'P'
+ 	 CMP R2, #4 
+ 	 BEQ scissorsuser		   // If user choice is scissors, display 'S'
+ 	 B clear_user			   // Clear display if no valid choice
+
+ rockuser: 
+ 	 LDR R4, [R3]			   // Load 'r' for user
+ 	 B opposite_select		   // Proceed to display machine choice
+
+ paperuser: 
+ 	 LDR R4, [R3, #4]		   // Load 'P' for user
+ 	 B opposite_select		   // Proceed to display machine choice
+
+ scissorsuser: 
+ 	 LDR R4, [R3, #8]		   // Load 'S' for user
+ 	 B opposite_select		   // Proceed to display machine choice
+
+ clear_user: 
+ 	 MOV R4, #0				   // Clear user display
+ 	 B opposite_select		   // Proceed to display opponent choice
+
+ opposite_select: 
+ 	 LDR R1, =oppositeselection // Load opponent choice address
+ 	 LDR R0, [R1]			   // Load opponent choice from memory
+ 	 CMP R0, #0 
+ 	 BEQ r_opposite			   // If opponent choice is rock, display 'r'
+ 	 CMP R0, #1 
+ 	 BEQ p_opposite			   // If opponent choice is paper, display 'P'
+ 	 CMP R0, #2 
+ 	 BEQ s_opposite			   // If opponent choice is scissors, display 'S'
+ 	 B clear_opposite		   // Clear display if no valid choice
+
+ r_opposite: 
+ 	 LDR R5, [R3]			   // Load 'r' for opponent
+ 	 B combine				   // Proceed to combine displays
+
+ p_opposite: 
+ 	 LDR R5, [R3, #4]		   // Load 'P' for opponent
+ 	 B combine				   // Proceed to combine displays
+
+ s_opposite: 
+ 	 LDR R5, [R3, #8]		   // Load 'S' for opponent
+ 	 B combine				   // Proceed to combine displays
+
+ clear_opposite: 
+ 	 MOV R5, #0				   // Clear opponent display
+ 	 B combine				   // Proceed to combine displays
+
+ combine:						   // Combine user and opponent selections and display them
+ 	 LDR R1, =segment		   // Load base address for seven-segment display
+ 	 MOV R0, #0				   // Clear register R0
+ 	 ORR R0, R0, R4			   // Combine user choice with R4
+ 	 ORR R0, R0, R5, LSL #8	// Combine opponent choice with R5 and shift left 8 bits
+ 	 STR R0, [R1]			   // Write combined value to seven-segment display
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ whoisthewin:		// Determine the winner based on user and opponent choices
+ 	 PUSH {R4, R5, LR}		   // Save registers R4, R5, and LR
+ 	 LDR R1, =userselection	   // Load user choice address
+ 	 LDR R2, [R1]			   // Load user choice from memory
+ 	 CMP R2, #1				   // Compare user choice with rock
+ 	 BEQ user_rock			   // Branch if user chose rock
+ 	 CMP R2, #2				   // Compare user choice with paper
+ 	 BEQ user_paper			   // Branch if user chose paper
+ 	 CMP R2, #4				   // Compare user choice with scissors
+ 	 BEQ user_scissors		   // Branch if user chose scissors
+ 	 B user_not_play		   // Branch if user didn't make a valid choice
+
+ user_rock:					   // User chose rock
+ 	 MOV R4, #0				   // Set R4 to 0 (rock)
+ 	 B compare_choices_setup
+
+ user_paper:					   // User chose paper
+ 	 MOV R4, #1				   // Set R4 to 1 (paper)
+ 	 B compare_choices_setup
+
+ user_scissors:				   // User chose scissors
+ 	 MOV R4, #2				   // Set R4 to 2 (scissors)
+
+ compare_choices_setup:
+     STR R4, [R1]			   // Store user choice (0,1,2) in memory
+ 	 B compare_choices		   // Compare user and opponent choices
+
+ user_not_play:				   // User didn't make a choice
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ compare_choices:				   // Compare user and opponent choices to determine winner
+ 	 LDR R1, =oppositeselection   // Load opponent choice address
+ 	 LDR R0, [R1]			   // Load opponent choice from memory
+ 	 CMP R4, #0				   // Compare user choice with rock
+ 	 BEQ userchooserock		   // Branch if user chose rock
+ 	 CMP R4, #1				   // Compare user choice with paper
+ 	 BEQ userchoosepaper		   // Branch if user chose paper
+ 	 B userchoosescissors	   // Branch if user chose scissors
+
+ userchooserock:				   // User chose rock
+ 	 CMP R0, #1				   // Did opponent choose paper?
+ 	 BEQ oppositescore		   // Yes -> Opponent wins
+ 	 CMP R0, #2				   // Did opponent choose scissors?
+ 	 BEQ userscore			   // Yes -> User wins
+ 	 B again                   // No (chose rock) -> Draw
+
+ userchoosepaper:				   // User chose paper
+ 	 CMP R0, #0				   // Did opponent choose rock?
+ 	 BEQ userscore			   // Yes -> User wins
+ 	 CMP R0, #2				   // Did opponent choose scissors?
+ 	 BEQ oppositescore		   // Yes -> Opponent wins
+ 	 B again                   // No (chose paper) -> Draw
+
+ userchoosescissors:			   // User chose scissors
+ 	 CMP R0, #0				   // Did opponent choose rock?
+ 	 BEQ oppositescore		   // Yes -> Opponent wins
+ 	 CMP R0, #1				   // Did opponent choose paper?
+ 	 BEQ userscore			   // Yes -> User wins
+ 	 B again                   // No (chose scissors) -> Draw
+
+ again:						   // Both user and opponent chose the same
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ oppositescore:				   // Opponent wins the round
+ 	 LDR R1, =ScoreOpposite	   // Load opponent score address
+ 	 LDR R0, [R1]			   // Load opponent score from memory
+ 	 ADD R0, R0, #1			   // Increment opponent score
+ 	 STR R0, [R1]			   // Store updated opponent score in memory
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ userscore:					   // User wins the round
+ 	 LDR R1, =ScoreUser		   // Load user score address
+ 	 LDR R0, [R1]			   // Load user score from memory
+ 	 ADD R0, R0, #1			   // Increment user score
+ 	 STR R0, [R1]			   // Store updated user score in memory
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ show_score:					   // Display user and opponent scores on seven-segment display
+ 	 PUSH {R4, R5, LR}		   // Save registers R4, R5, and LR
+
+ 	 // Select user score
+ 	 LDR R1, =ScoreUser		   // Load user score address
+ 	 LDR R0, [R1]			   // Load user score from memory
+ 	 LDR R2, =digits		   // Load digits address
+ 	 LDR R4, [R2, R0, LSL #2]   // Load user score from digits
+
+ 	 // Select machine score
+ 	 LDR R1, =ScoreOpposite	   // Load opponent score address
+ 	 LDR R0, [R1]			   // Load opponent score from memory
+ 	 LDR R2, =digits		   // Load digits address
+ 	 LDR R5, [R2, R0, LSL #2]   // Load machine score from digits
+
+ 	 // Combine and display scores
+ 	 LDR R1, =segment1		   // Load base address for second seven-segment display
+ 	 MOV R0, #0				   // Clear register R0
+ 	 ORR R0, R0, R4			   // Combine user score with R4
+ 	 ORR R0, R0, R5, LSL #8	   // Combine machine score with R5 and shift left 8 bits
+ 	 STR R0, [R1]			   // Write combined value to second seven-segment display
+
+ 	 POP {R4, R5, LR}		   // Restore R4, R5, and LR
+ 	 BX LR					   // Return
+
+ wait:						   // Wait for push buttons to signal next round or reset
+ 	 LDR R1, =0xFF200050		   // Load base address for push buttons
+ 	 
+ wait_loop:					   // Wait until a button press is detected
+ 	 LDR R0, [R1]			   // Load push button status
+ 	 AND R0, R0, #0x2		   // Check if push button 1 is pressed
+ 	 CMP R0, #0x2 
+ 	 BEQ continue			   // If push button 1 is pressed, continue playing
+ 	 LDR R2, [R1]			   // Load push button status again
+ 	 AND R2, R2, #0x4		   // Check if push button 2 is pressed
+ 	 CMP R2, #0x4 
+ 	 BEQ reset				   // If push button 2 is pressed, reset the game
+
+ 	 B wait_loop			   // If no button is pressed, continue waiting
+
+ continue: 
+ 	 BX LR					   // Return
+
+ reset:
+ 	 B _start				   // Restart the game completely to prevent breakpoint and score errors
+
+ winnerofgame:				   // Check if there's a winner
+ 	 LDR R1, =ScoreUser		   // Load address of user score
+ 	 LDR R0, [R1]			   // Load user score
+ 	 MOV R3, #5				   // Winning threshold
+ 	 CMP R0, R3 
+ 	 BEQ userwon			   // If user score is 5, user wins
+ 	 LDR R1, =ScoreOpposite	   // Load address of opponent score
+ 	 LDR R0, [R1]			   // Load opponent score
+ 	 CMP R0, R3 
+ 	 BEQ oppositewon		   // If opponent score is 5, opponent wins
+ 	 B no_winner			   // If there's no winner yet, continue playing
+
+ no_winner: 
+ 	 BX LR					   // Return
+
+ userwon:					   // User wins
+ 	 LDR R1, =LEDS			   // Load base address for LEDs
+ 	 LDR R0, =0b00111111		   // Value to light up 6 LEDs (binary)
+ 	 STR R0, [R1]			   // Light up the LEDs
+ 	 LDR R1, =whoiswinner	   // Load address of winner display
+ 	 LDR R0, [R1, #4]		   // Load winner display value ("U")
+ 	 BL display_winner         // Display the winner on the screen
+ 	 BL game_over              // Perform common end-of-game operations
+ 	 B _start				   // Restart the game
+
+ oppositewon:				   // Opponent wins
+ 	 LDR R1, =LEDS			   // Load base address for LEDs
+ 	 LDR R0, =0b00000011		   // Value to light up 2 LEDs (binary)
+ 	 STR R0, [R1]			   // Light up the LEDs
+ 	 LDR R1, =whoiswinner	   // Load address of winner display
+ 	 LDR R0, [R1]			   // Load opponent win display value ("L")
+ 	 BL display_winner         // Display the winner on the screen
+ 	 BL game_over              // Perform common end-of-game operations
+ 	 B _start				   // Restart the game
+ 	 
+ display_winner:
+     LDR R1, =segment		   // Load address of seven-segment display
+ 	 LDR R2, [R1]			   // Load current value in seven-segment display
+ 	 ORR R2, R2, R0, LSL #16	   // Combine winner display
+ 	 STR R2, [R1]			   // Write winner display to seven-segment display
+     BX LR                     // Return
+ 
+ game_over:                 // Common end-of-game operations
+     PUSH {LR}                 // Save LR to the stack
+     
+ wait_for_restart:
+     LDR R1, =0xFF200050		   // Base address for push buttons
+ 	 LDR R0, [R1] 
+ 	 AND R0, R0, #0x8		   // Check if push button 3 is pressed
+ 	 CMP R0, #0 
+ 	 BEQ wait_for_restart	   // If not pressed, wait
+ 	 POP {LR}                  // Restore LR from the stack
+     BX LR                     // Standard and safe return
+ 	 
+ .equ segment, 0xFF200020	   // seven-segment display base address
+ .equ segment1, 0xFF200030	   // HEX4 and HEX5 display base address
+ .equ switch, 0xFF200040	   // switches base address
+ .equ baseoftimer, 0xFFFEC600   // private timer base address
+ .equ valueoftimer, 0xFFFEC604  // timer current value register
+ .equ controltimer, 0xFFFEC608 // timer control register
+ .equ LEDS, 0xFF200000		   // LEDs base address
+
+ .data 
+ rckpprscs: 
+ 	 .word 0b01010000	   // 'r' for Rock
+ 	 .word 0b01110011	   // 'P' for Paper
+ 	 .word 0b01101101	   // 'S' for Scissors
+ whoiswinner: 
+ 	 .word 0b00111000	   // "L" for Opponent wins (Lose)
+ 	 .word 0b00111110	   // "U" for User wins
+ digits: 
+ 	 .word 0b00111111	   // for 0
+ 	 .word 0b00000110	   // for 1
+ 	 .word 0b01011011	   // for 2
+ 	 .word 0b01001111	   // for 3
+ 	 .word 0b01100110	   // for 4
+ 	 .word 0b01101101	   // for 5
+ 	 .word 0b01111101	   // for 6
+ 	 .word 0b00000111	   // for 7
+ 	 .word 0b01111111	   // for 8
+ 	 .word 0b01101111	   // for 9
+
+ ScoreUser: 
+ 	 .word 0				   // Initialize user score to 0
+ ScoreOpposite: 
+ 	 .word 0				   // Initialize opponent score to 0
+
+ userselection: 
+ 	 .word 0				   // Initialize user choice to 0
+ oppositeselection: 
+ 	 .word 0				   // Initialize opponent choice to 0
